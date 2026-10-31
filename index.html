@@ -59,7 +59,23 @@ colors.forEach((c,i)=>{let b=document.createElement('button');b.className='swatc
 function refreshSwatchCheck(){document.querySelectorAll('#palette .swatch').forEach(b=>{const n=Number(b.dataset.color);b.textContent=n+1+(n===colorIndex?' ✓':'');b.setAttribute('aria-pressed',String(n===colorIndex));});}
 const hintCanvas=document.createElement('canvas');hintCanvas.setAttribute('aria-hidden','true');hintCanvas.style.cssText='position:absolute;pointer-events:none;z-index:5;opacity:1;';canvas.parentElement.style.position='relative';canvas.parentElement.appendChild(hintCanvas);
 function positionHintCanvas(){hintCanvas.style.left=canvas.offsetLeft+'px';hintCanvas.style.top=canvas.offsetTop+'px';hintCanvas.style.width=canvas.offsetWidth+'px';hintCanvas.style.height=canvas.offsetHeight+'px';hintCanvas.style.transform=canvas.style.transform;hintCanvas.style.transformOrigin='top left';}
-function refreshRegionHints(){if(!regionIds||!canvas.width||!canvas.height)return;hintCanvas.width=canvas.width;hintCanvas.height=canvas.height;positionHintCanvas();const hctx=hintCanvas.getContext('2d');if(mode!=='numbers'||colorIndex<0)return;const im=hctx.createImageData(canvas.width,canvas.height),d=im.data,w=canvas.width;for(let p=0;p<regionIds.length;p++){const id=regionIds[p];if(!id||regions[id]||!isActiveRegion(id))continue;if((assignment[id]??((id-1)%colors.length))!==colorIndex)continue;const x=p%w,y=(p/w)|0;if(((x+y)%12)<5){const k=p*4;d[k]=75;d[k+1]=75;d[k+2]=75;d[k+3]=120;}}hctx.putImageData(im,0,0);}
+function refreshRegionHints(){
+ if(!regionIds||!canvas.width||!canvas.height)return;
+ // Paint the hatch on the actual drawing surface so layout and zoom cannot hide it.
+ hintCanvas.style.display='none';
+ if(mode!=='numbers'||colorIndex<0||!document.getElementById('numbers').checked)return;
+ const w=canvas.width,h=canvas.height;
+ const mask=document.createElement('canvas');mask.width=w;mask.height=h;
+ const mc=mask.getContext('2d');const im=mc.createImageData(w,h),d=im.data;
+ for(let p=0;p<regionIds.length;p++){
+  const id=regionIds[p];
+  if(!id||regions[id]||!isActiveRegion(id))continue;
+  if((assignment[id]??((id-1)%colors.length))!==colorIndex)continue;
+  const x=p%w,y=(p/w)|0;
+  if(((x+y)%12)<5){const k=p*4;d[k]=90;d[k+1]=90;d[k+2]=90;d[k+3]=110;}
+ }
+ mc.putImageData(im,0,0);ctx.drawImage(mask,0,0);
+}
 refreshSwatchCheck();
 const findButton=document.getElementById('number-find');if(findButton)findButton.addEventListener('click',()=>{if(!regionIds||colorIndex<0){document.getElementById('status').textContent='Bitte zuerst ein Bild und eine Farbnummer auswählen.';return;}const remain=remainingByColor();refreshRegionHints();const count=remain[colorIndex]||0;document.getElementById('number-progress').textContent=count?('Nummer '+(colorIndex+1)+': '+count+' offene Flächen, grau schraffiert.'):('Nummer '+(colorIndex+1)+' ist vollständig ausgemalt.');if(!count)return;const first=positions.findIndex((p,id)=>p&&!regions[id]&&isActiveRegion(id)&&(assignment[id]??((id-1)%colors.length))===colorIndex);if(first>=0){const pos=positions[first];const rect=canvas.getBoundingClientRect();const area=document.getElementById('panarea');if(area&&pos){area.scrollLeft=Math.max(0,(pos.x/canvas.width)*rect.width-area.clientWidth/2);area.scrollTop=Math.max(0,(pos.y/canvas.height)*rect.height-area.clientHeight/2);}}});
 document.getElementById('custom').oninput=e=>selectColor(e.target.value,-1);document.getElementById('eraser').onclick=e=>{selectColor('#ffffff',-1);e.target.classList.add('active')};
