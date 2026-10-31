@@ -78,7 +78,17 @@ function fixLabelPositions(){
 // Referenzgestützte, heuristische Bereichstrennung. Keine garantierte Objekterkennung.
 let referenceImage=null, referenceClasses=null;
 function currentPaintArea(){return document.querySelector('input[name="paint-area"]:checked')?.value||'main'}
-function isActiveRegion(id){const a=currentPaintArea();if(a==='all'||!referenceClasses)return true;return referenceClasses[id]===a}
+// Automatic approximate separation without mandatory second image.
+function estimatedRegionClass(id){
+ const p=positions[id];if(!p||!canvas.width||!canvas.height)return 'background';
+ const x=p.x/canvas.width,y=p.y/canvas.height;
+ // Center weighted figure estimate, with narrow lower torso. No manual marking.
+ const dx=(x-.5)/(y>.73?.29:.38),dy=(y-.48)/.53;
+ return dx*dx+dy*dy<=1?'main':'background';
+}
+function isActiveRegion(id){const a=currentPaintArea();if(a==='all')return true;
+ return (referenceClasses?.[id]||estimatedRegionClass(id))===a;
+}
 function classifyReference(){referenceClasses=null;if(!referenceImage||!canvas.width||!positions.length)return;
  const c=document.createElement('canvas');c.width=canvas.width;c.height=canvas.height;
  const x=c.getContext('2d',{willReadFrequently:true});x.drawImage(referenceImage,0,0,c.width,c.height);
@@ -197,11 +207,11 @@ document.getElementById('tiny-auto-color').onclick=()=>{if(!positions.length)ret
     colors[i]='#'+rgb.map(x=>Math.round(Math.max(0,Math.min(255,factor>1?x+(255-x)*(factor-1):x*factor))).toString(16).padStart(2,'0')).join('');
    }
    syncMotifSwatches();
-   note.textContent='Naturpalette aktiv: Braun, Grün und Himmelblau. Wichtig: Das Studio kann Baum und Figur noch nicht automatisch trennen. Nur erkannte Hintergrundflächen werden zum Ausmalen freigegeben.';
+   note.textContent='Naturpalette aktiv: Braun, Grün und Himmelblau. Wichtig: Das Studio kann Baum und Figur noch nicht automatisch trennen. Nur automatisch geschätzte Hintergrundflächen erhalten Zahlen.';
   } else {
    if(mode.value==='original')mode.dispatchEvent(new Event('change'));
    else {updateWorld();syncMotifSwatches();}
-   note.textContent=v==='main'?'Figurenpalette aktiv. Mit einer Farbvorlage werden nur geschätzte Hauptmotivflächen freigegeben.':'Figurenpalette für das gesamte Bild aktiv.';
+   note.textContent=v==='main'?'Figurenpalette aktiv. Nur automatisch geschätzte Hauptmotivflächen erhalten Zahlen.':'Figurenpalette für das gesamte Bild aktiv.';
   }
   render();
  }
