@@ -147,13 +147,46 @@ function updateNumberOverlay(visible){
   t.setAttribute('font-size',fs);t.setAttribute('font-family','Arial,sans-serif');t.setAttribute('font-weight','700');
   t.setAttribute('text-anchor','middle');t.setAttribute('dominant-baseline','central');
   t.setAttribute('fill','#302c33');t.setAttribute('stroke','#fff');t.setAttribute('stroke-width',Math.max(.7,fs/5));
-  t.setAttribute('paint-order','stroke');t.textContent=num;frag.appendChild(t);
+  t.setAttribute('paint-order','stroke');t.textContent=num;
+  // Number labels are direct, precise targets even when their regions are tiny.
+  t.dataset.regionId=String(id);t.style.pointerEvents='all';t.style.cursor='pointer';
+  t.addEventListener('click',ev=>{ev.stopPropagation();paintRegionById(id)});
+  frag.appendChild(t);
  }
  numberOverlay.appendChild(frag);
 }
 window.addEventListener('resize',positionNumberOverlay);
 function render(showNumbers=document.getElementById('numbers').checked){if(!base)return;hideEmptyWorkspace();let output=new Uint8ClampedArray(base.data);for(let id=1;id<regionPixels.length;id++){let col=regions[id];if(!col)continue;if(typeof col==='string'&&col.startsWith('@'))col=colors[Number(col.slice(1))]||'#ffffff';let rgb=[1,3,5].map(i=>parseInt(col.slice(i,i+2),16));for(let px of regionPixels[id]){let j=px*4;let shade=Math.min(output[j],output[j+1],output[j+2])/255;let alpha=Math.min(1,Math.max(0,(shade-.35)/.60));let x=px%canvas.width,y=(px/canvas.width)|0;let noise=((x*17+y*31+(x*y)%71)%101)/100;let technique=document.getElementById('style').value;let strength=1,light=0;if(technique==='Buntstift'){strength=.70+noise*.25;light=(Math.sin(x*.75+y*.37)+1)*.045}else if(technique==='Wachsmalstift'){strength=.76+noise*.24;light=noise>.80?.16:0}else if(technique==='Aquarell'){strength=.32+noise*.20;light=(Math.sin(x*.035)+Math.cos(y*.047)+2)*.035}else if(technique==='Wasserfarbe'){strength=.42+noise*.23;light=(Math.sin(x*.07+y*.03)+1)*.045}else if(technique==='Filzstift'){strength=.94;light=0}else if(technique==='Pastellkreide'||technique==='Kreide'){strength=.52+noise*.35;light=noise>.65?.12:0}else if(technique==='Ölpastell'){strength=.78+noise*.22;light=(Math.sin(x*.2+y*.25)+1)*.05}else if(technique==='Tusche'){strength=.97}else if(technique==='Glitzer'){strength=.74+noise*.18;light=noise>.975?.75:0}alpha*=strength;for(let k=0;k<3;k++)output[j+k]=Math.round(Math.min(255,output[j+k]*(1-alpha)+rgb[k]*alpha+255*light*alpha))}}ctx.putImageData(new ImageData(output,canvas.width,canvas.height),0,0);updateNumberOverlay(showNumbers);refreshRegionHints();document.getElementById('status').textContent=regions.filter(Boolean).length+' Flächen ausgemalt';updateCompleted()}
-canvas.addEventListener('click',e=>{if(!regionIds)return;let r=canvas.getBoundingClientRect(),x=Math.floor((e.clientX-r.left)*canvas.width/r.width),y=Math.floor((e.clientY-r.top)*canvas.height/r.height);if(x<0||y<0||x>=canvas.width||y>=canvas.height)return;let id=regionIds[y*canvas.width+x];if(!id)return;if(!isActiveRegion(id)){document.getElementById('status').textContent='Dieser Bereich ist in der aktuellen Auswahl nicht freigegeben. Farbvorlage prüfen.';return;}let c=colorIndex>=0?(colors[colorIndex]||selected):selected;if(mode==='numbers'&&selected!=='#ffffff'&&colorIndex!==(assignment[id]??((id-1)%colors.length))){document.getElementById('status').textContent='Hier gehört Farbe '+((assignment[id]??((id-1)%colors.length))+1)+' hin';return;}if(regions[id]===c)return;snapshot();regions[id]=c;completedAutoAdvance=true;render()});
+function paintRegionById(id){
+ if(!id||!regionPixels[id]||!regionPixels[id].length)return;
+ if(!isActiveRegion(id)){document.getElementById('status').textContent='Dieser Bereich ist in der aktuellen Auswahl nicht freigegeben.';return;}
+ const expected=assignment[id]??((id-1)%colors.length);
+ const c=colorIndex>=0?(colors[colorIndex]||selected):selected;
+ if(mode==='numbers'&&selected!=='#ffffff'&&colorIndex!==expected){document.getElementById('status').textContent='Hier gehört Farbe '+(expected+1)+' hin';return;}
+ if(regions[id]===c)return;
+ snapshot();regions[id]=c;completedAutoAdvance=true;render();
+}
+canvas.addEventListener('click',e=>{
+ if(!regionIds||panMode)return;
+ const r=canvas.getBoundingClientRect();
+ const x=Math.floor((e.clientX-r.left)*canvas.width/r.width),y=Math.floor((e.clientY-r.top)*canvas.height/r.height);
+ if(x<0||y<0||x>=canvas.width||y>=canvas.height)return;
+ let id=regionIds[y*canvas.width+x];
+ // Only rescue a click on a contour or empty pixel close to a tiny numbered region.
+ // Never redirect a click that already belongs to another valid region.
+ if(!id||id===65535){
+   const radiusX=12*canvas.width/r.width,radiusY=12*canvas.height/r.height;
+   let best=Infinity,candidate=0;
+   for(let k=1;k<positions.length;k++){
+     const pos=positions[k];if(!pos||pos.count>600||!regionPixels[k]?.length||!isActiveRegion(k))continue;
+     const dx=((pos.labelX??pos.x)-x)/radiusX,dy=((pos.labelY??pos.y)-y)/radiusY;
+     const d=dx*dx+dy*dy;
+     if(d<=1&&d<best){best=d;candidate=k;}
+   }
+   id=candidate;
+ }
+ paintRegionById(id);
+});
 // Studio starts with an empty workspace. Images are loaded only on explicit user action.
 canvas.width=1200;canvas.height=800;ctx.clearRect(0,0,canvas.width,canvas.height);
 base=null;regionIds=null;regions=[];positions=[];regionPixels=[];
